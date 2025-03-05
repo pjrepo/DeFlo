@@ -1,6 +1,10 @@
 // IndexedDB Setup
+//--> Declares a global variable for the database connection <--//
 let db;
+//--> Opens (or creates) an IndexedDB database named “DeFloDB” with version 1 <--//
 const request = indexedDB.open("DeFloDB", 1);
+//--> Runs when the database is created/upgraded <--//
+//--> Checks if the “tasks” object store exists; if not, it creates one with an auto-incrementing primary key (id). <--//
 request.onupgradeneeded = (event) => {
   db = event.target.result;
   console.log(event.target);
@@ -8,27 +12,34 @@ request.onupgradeneeded = (event) => {
     db.createObjectStore("tasks", { keyPath: "id", autoIncrement: true });
   }
 };
+//--> Called when the database opens successfully <--//
+//--> Saves the database reference and calls loadTasksFromDB() to retrieve tasks <--//
 request.onsuccess = (event) => {
   db = event.target.result;
   loadTasksFromDB();
 };
+//--> Logs any errors that occur while opening the database <--//
 request.onerror = (event) => {
   console.error("IndexedDB error:", event.target.errorCode);
 };
 
 // Global filter variables
+//--> Variables to hold the current filter settings for status and priority <--//
 let activeStatus = "all"; // "all", "Pending", "In Progress", "Completed"
 let activePriority = ""; // empty string means no filter
 
 // Toggle profile dropdown
 const profile = document.getElementById("profile");
 const dropdown = document.getElementById("dropdown");
-profile.addEventListener("click", function (event) {
+console.log(dropdown.style);
+//--> Listens for clicks on the profile container to toggle the dropdown menu visibility <--//
+profile.addEventListener("click", (event) => {
   event.stopPropagation();
   dropdown.style.display =
     dropdown.style.display === "block" ? "none" : "block";
 });
-document.addEventListener("click", function () {
+//--> A document-level click event hides the dropdown if it’s open and a click happens outside <--//
+document.addEventListener("click", () => {
   if (dropdown.style.display === "block") {
     dropdown.style.display = "none";
   }
@@ -38,15 +49,18 @@ document.addEventListener("click", function () {
 const addButton = document.getElementById("addButton");
 const taskModal = document.getElementById("taskModal");
 const cancelModal = document.getElementById("cancelModal");
-addButton.addEventListener("click", function () {
+//--> Clicking the floating button (#addButton) sets the modal’s display to flex (visible) <--//
+addButton.addEventListener("click", () => {
   taskModal.style.display = "flex";
 });
-cancelModal.addEventListener("click", function () {
+//--> The cancel button (#cancelModal) hides the modal when clicked <--//
+cancelModal.addEventListener("click", () => {
   taskModal.style.display = "none";
 });
 
 // Function to convert priority text to emoji
-function getPriorityEmoji(priority) {
+//--> Returns an emoji based on the task’s priority (High → red circle, Medium → yellow circle, Low → green circle) <--//
+const getPriorityEmoji = (priority) => {
   switch (priority) {
     case "High":
       return "🔴";
@@ -60,7 +74,8 @@ function getPriorityEmoji(priority) {
 }
 
 // Create a DOM element for a task
-function createTaskElement(task) {
+//--> Creates a DOM element for each task with data attributes storing all task properties <--//
+const createTaskElement = (task) => {
   const taskItem = document.createElement("div");
   taskItem.className = "task-item";
   taskItem.dataset.id = task.id;
@@ -72,6 +87,7 @@ function createTaskElement(task) {
   taskItem.dataset.status = task.status;
   taskItem.dataset.created = task.created;
   taskItem.dataset.modified = task.modified;
+  //--> Sets inner HTML with the task title, priority (as emoji), status, and action buttons (Edit and Delete) <--//
   taskItem.innerHTML = `
     <div class="task-title">${task.title}</div>
     <div class="task-actions">
@@ -83,60 +99,66 @@ function createTaskElement(task) {
       <button type="button" class="delete-btn"><i class="fa-solid fa-trash"></i> Delete</button>
     </div>
   `;
+  //--> Applies a "completed" class if the task’s status is "Completed" (and filters allow it) <--//
   if (task.status === "Completed" && activeStatus === "all") {
     taskItem.classList.add("completed");
   }
   return taskItem;
-}
+};
 
-// Load tasks from IndexedDB
-function loadTasksFromDB() {
+//--> Opens a read-only transaction on the "tasks" store and retrieves all tasks <--//
+const loadTasksFromDB = () => {
   const transaction = db.transaction(["tasks"], "readonly");
   const store = transaction.objectStore("tasks");
   const requestAll = store.getAll();
-  requestAll.onsuccess = function (event) {
+  requestAll.onsuccess = (event) => {
     const tasks = event.target.result;
     const taskItems = document.getElementById("taskItems");
+    //--> Clears the existing tasks list, creates elements for each task, and appends them to the task list container <--//
     taskItems.innerHTML = "";
     tasks.forEach((task) => {
       const taskEl = createTaskElement(task);
       taskItems.appendChild(taskEl);
     });
+    //--> Calls applyFilters() and updateTaskView() to update the UI based on current filters and task count <--//
     applyFilters();
     updateTaskView();
   };
-}
+};
 
 // Add task to IndexedDB
-function addTaskToDB(task) {
+//--> Opens a read-write transaction to add a new task to the store <--//
+const addTaskToDB = (task) => {
   const transaction = db.transaction(["tasks"], "readwrite");
   const store = transaction.objectStore("tasks");
   const addRequest = store.add(task);
-  addRequest.onsuccess = function (event) {
+  //--> Once added, assigns the new task’s ID, creates its element, and appends it to the task list <--//
+  addRequest.onsuccess = (event) => {
     task.id = event.target.result;
     const taskEl = createTaskElement(task);
     document.getElementById("taskItems").appendChild(taskEl);
     applyFilters();
     updateTaskView();
   };
-}
+};
 
 // Update task in IndexedDB
-function updateTaskInDB(task) {
+const updateTaskInDB = (task) =>{
   const transaction = db.transaction(["tasks"], "readwrite");
   const store = transaction.objectStore("tasks");
   store.put(task);
 }
 
 // Delete task from IndexedDB
-function deleteTaskFromDB(taskId) {
+const deleteTaskFromDB = (taskId) => {
   const transaction = db.transaction(["tasks"], "readwrite");
   const store = transaction.objectStore("tasks");
   store.delete(Number(taskId));
 }
 
 // Apply filters (status, priority, search term)
-function applyFilters() {
+//--> Iterates over each task element, checking if it matches the active status, priority, and search term filters <--//
+const applyFilters = () => {
   const tasks = document.querySelectorAll("#taskItems .task-item");
   const searchTerm = document
     .getElementById("searchBar")
@@ -174,6 +196,7 @@ function applyFilters() {
       task.style.display = "none";
     }
   });
+  //--> Shows or hides tasks accordingly <--//
   const filterMessage = document.getElementById("filterMessage");
   if (
     document.getElementById("taskItems").children.length > 0 &&
@@ -183,11 +206,13 @@ function applyFilters() {
   } else {
     filterMessage.style.display = "none";
   }
+  //--> Updates the export button visibility <--//
   updateExportButton(visibleCount);
-}
+};
 
 // Update Export Button based on visible tasks
-function updateExportButton(visibleCount) {
+const updateExportButton = (visibleCount) => {
+  //--> Determines whether to show the export button based on the count of visible tasks <--//
   const exportButton = document.getElementById("exportButton");
   if (
     document.getElementById("taskItems").children.length === 0 ||
@@ -196,6 +221,7 @@ function updateExportButton(visibleCount) {
     exportButton.style.display = "none";
   } else {
     exportButton.style.display = "block";
+    //--> Adjusts the button text depending on whether all tasks are shown or only filtered ones <--//
     if (
       activeStatus === "all" &&
       activePriority === "" &&
@@ -209,10 +235,11 @@ function updateExportButton(visibleCount) {
 }
 
 // Update view based on task count
-function updateTaskView() {
+const updateTaskView = () => {
   const taskItems = document.getElementById("taskItems");
   const noTaskMessage = document.getElementById("noTaskMessage");
   const taskListContainer = document.getElementById("taskListContainer");
+  //--> Toggles between showing the motivational message (if no tasks exist) and displaying the task list container <--//
   if (taskItems.children.length === 0) {
     noTaskMessage.style.display = "flex";
     taskListContainer.style.display = "none";
@@ -224,6 +251,7 @@ function updateTaskView() {
 
 // Create Task form submission
 const taskForm = document.getElementById("taskForm");
+//--> On submission, gathers values from the inputs, constructs a task object (including created and modified timestamps), and adds it to IndexedDB using addTaskToDB() <--//
 taskForm.addEventListener("submit", function (e) {
   e.preventDefault();
   const title = document.getElementById("title").value.trim();
@@ -244,13 +272,15 @@ taskForm.addEventListener("submit", function (e) {
     modified: now,
   };
   addTaskToDB(task);
+  //--> Resets the form and hides the modal <--//
   taskForm.reset();
   taskModal.style.display = "none";
 });
 
 // Edit Task functionality
 let currentEditingTask = null;
-document.getElementById("taskItems").addEventListener("click", function (e) {
+//--> When the edit button is clicked on a task, fills the edit modal with the task’s current data and shows the modal <--//
+document.getElementById("taskItems").addEventListener("click", (e) => {
   if (e.target.closest(".edit-btn")) {
     const taskItem = e.target.closest(".task-item");
     currentEditingTask = taskItem;
@@ -268,9 +298,10 @@ document.getElementById("taskItems").addEventListener("click", function (e) {
 });
 
 // Handle Edit Task form submission
+//--> On submission, updates the task’s DOM element with the new values, updates its data attributes (including the modified timestamp), and calls updateTaskInDB() <--//
 document
   .getElementById("editTaskForm")
-  .addEventListener("submit", function (e) {
+  .addEventListener("submit", (e) => {
     e.preventDefault();
     if (currentEditingTask) {
       const newTitle = document.getElementById("editTitle").value.trim();
@@ -314,12 +345,13 @@ document
 // Cancel Edit Task Modal
 document
   .getElementById("cancelEditModal")
-  .addEventListener("click", function () {
+  .addEventListener("click", () => {
     document.getElementById("editTaskModal").style.display = "none";
   });
 
 // Delete Task functionality
-document.getElementById("taskItems").addEventListener("click", function (e) {
+//--> Listens for clicks on the delete button within a task item, removes the task from both the database (via deleteTaskFromDB()) and the UI <--//
+document.getElementById("taskItems").addEventListener("click", (e) => {
   if (e.target.closest(".delete-btn")) {
     const taskItem = e.target.closest(".task-item");
     deleteTaskFromDB(taskItem.dataset.id);
@@ -330,12 +362,13 @@ document.getElementById("taskItems").addEventListener("click", function (e) {
 
 // Logout click event
 const logout = document.getElementById("logout");
-logout.addEventListener("click", function (e) {
+logout.addEventListener("click", (e) => {
   e.preventDefault();
-  alert("Logout functionality here!");
+  alert("Logout functionality, loading soon!");
 });
 
 // Status filter event listener
+//--> Listeners on each button set the activeStatus variable. Clicking a button toggles its active state and applies the filter <--//
 document.querySelectorAll(".status-filters button").forEach((btn) => {
   btn.addEventListener("click", function () {
     if (this.classList.contains("active")) {
@@ -362,6 +395,7 @@ document
   .classList.add("active");
 
 // Priority filter event listener (dropdown)
+//--> When an option is clicked, toggles the active state. Sets the activePriority variable and updates the dropdown button’s text accordingly <--//
 document
   .querySelectorAll(
     ".dropdown-sort.priority-dropdown .dropdown-sort-content a[data-priority]"
@@ -396,6 +430,8 @@ document
   });
 
 // Sorting functionality for sort dropdown
+//--> Listeners on each button set the activeStatus variable. Clicking a button toggles its active state and applies the filter <--//
+//--> If a sorting option is toggled off, it reverts to the default order (by creation time) <--//
 document
   .querySelectorAll(
     ".dropdown-sort:not(.priority-dropdown) .dropdown-sort-content a[data-sort]"
@@ -444,11 +480,13 @@ document
   });
 
 // Search bar event listener
+//--> Calls applyFilters() as the user types in the search bar to dynamically filter tasks by title or description <--//
 document.getElementById("searchBar").addEventListener("input", function () {
   applyFilters();
 });
 
 // Export to CSV
+//--> When clicked, builds a CSV string containing headers and each task’s data (only including visible tasks unless “Export All” is indicated) <--//
 document.getElementById("exportButton").addEventListener("click", function () {
   const exportAll = this.textContent.trim() === "Export All";
   const tasks = document.querySelectorAll("#taskItems .task-item");
@@ -467,6 +505,7 @@ document.getElementById("exportButton").addEventListener("click", function () {
       data += `${title},${description},${startDate},${endDate},${priority},${status},${created},${modified}\n`;
     }
   });
+  //--> Creates a Blob from the CSV data, generates a temporary URL, and programmatically triggers a download of the CSV file <--//
   const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -479,4 +518,5 @@ document.getElementById("exportButton").addEventListener("click", function () {
 });
 
 // Initial view update
+//--> Ensures the correct view is displayed (either the motivational message or the task list) when the script first runs <--//
 updateTaskView();
