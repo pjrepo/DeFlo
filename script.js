@@ -1,18 +1,18 @@
 // IndexedDB Setup
 let db;
 const request = indexedDB.open("DeFloDB", 1);
-request.onupgradeneeded = function (event) {
+request.onupgradeneeded = (event) => {
   db = event.target.result;
   console.log(event.target);
   if (!db.objectStoreNames.contains("tasks")) {
     db.createObjectStore("tasks", { keyPath: "id", autoIncrement: true });
   }
 };
-request.onsuccess = function (event) {
+request.onsuccess = (event) => {
   db = event.target.result;
   loadTasksFromDB();
 };
-request.onerror = function (event) {
+request.onerror = (event) => {
   console.error("IndexedDB error:", event.target.errorCode);
 };
 
